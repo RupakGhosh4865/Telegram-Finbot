@@ -553,11 +553,61 @@ class BotHandlers(LoggerMixin):
     
     async def _handle_view_market_callback(self, query):
         """Handle view market callback."""
+        # For symbol search we use a ReplyKeyboardMarkup (reply keyboard).
+        # Editing an existing message after a callback expects an InlineKeyboardMarkup,
+        # so send a new message with the reply keyboard instead to avoid Telegram 400 errors.
         keyboard = BotKeyboards.get_symbol_search_keyboard()
-        await query.edit_message_text(
+
+        # Acknowledge the callback and send a fresh message with the reply keyboard
+        await query.answer()
+        await query.message.reply_text(
             BotMessages.symbol_search_prompt(),
             reply_markup=keyboard
         )
+
+    async def _handle_exchange_selection(self, query):
+        """Handle exchange selection callbacks coming from inline buttons."""
+        await query.answer()
+
+        user_id = query.from_user.id
+        session = self._get_user_session(user_id)
+
+        # Toggle selection
+        if query.data.startswith("select_exchange:"):
+            exchange = query.data.split(":", 1)[1]
+            if exchange in session["selected_exchanges"]:
+                session["selected_exchanges"].remove(exchange)
+            else:
+                session["selected_exchanges"].append(exchange)
+
+            keyboard = BotKeyboards.get_exchange_selection(selected=session["selected_exchanges"])
+            await query.edit_message_reply_markup(reply_markup=keyboard)
+
+        elif query.data == "confirm_exchanges":
+            if not session["selected_exchanges"]:
+                await query.edit_message_text("Please select at least one exchange to continue.")
+                return
+
+            # Proceed to symbol selection for the first selected exchange
+            await self._show_symbol_selection(query, session["selected_exchanges"][0])
+
+        elif query.data == "cancel_exchange_selection":
+            await query.edit_message_text(
+                "Exchange selection cancelled.",
+                reply_markup=BotKeyboards.get_main_menu()
+            )
+
+    async def _handle_confirm_exchanges(self, query):
+        """Alias handler in case callbacks route directly to confirm action."""
+        await query.answer()
+        user_id = query.from_user.id
+        session = self._get_user_session(user_id)
+
+        if not session["selected_exchanges"]:
+            await query.edit_message_text("Please select at least one exchange to continue.")
+            return
+
+        await self._show_symbol_selection(query, session["selected_exchanges"][0])
     
     async def _handle_help_callback(self, query):
         """Handle help callback."""
@@ -567,6 +617,38 @@ class BotHandlers(LoggerMixin):
             reply_markup=keyboard,
             parse_mode='Markdown'
         )
+
+    async def _handle_symbol_selection(self, query):
+        """Handle symbol selection callbacks from inline buttons."""
+        await query.answer()
+
+        user_id = query.from_user.id
+        session = self._get_user_session(user_id)
+
+        if query.data.startswith("select_symbol:"):
+            symbol = query.data.split(":", 1)[1]
+
+            if symbol in session["selected_symbols"]:
+                session["selected_symbols"].remove(symbol)
+            else:
+                session["selected_symbols"].append(symbol)
+
+            # Update keyboard (symbols list may be empty when called from other places)
+            keyboard = BotKeyboards.get_symbol_selection(symbols=[], selected=session["selected_symbols"])
+            await query.edit_message_reply_markup(reply_markup=keyboard)
+
+        elif query.data == "confirm_symbols":
+            if not session["selected_symbols"]:
+                await query.edit_message_text("Please select at least one symbol to continue.")
+                return
+
+            await self._show_threshold_selection(query)
+
+        elif query.data == "cancel_symbol_selection":
+            await query.edit_message_text(
+                "Symbol selection cancelled.",
+                reply_markup=BotKeyboards.get_main_menu()
+            )
     
     async def _handle_status_callback(self, query):
         """Handle status callback."""
@@ -628,6 +710,35 @@ class BotHandlers(LoggerMixin):
             self.logger.error("Error starting monitoring", error=str(e))
             await query.edit_message_text(
                 BotMessages.error_generic("Failed to start monitoring")
+            )
+
+    async def _handle_threshold_selection(self, query):
+        """Handle threshold selection callbacks."""
+        await query.answer()
+
+        user_id = query.from_user.id
+        session = self._get_user_session(user_id)
+
+        if query.data.startswith("select_threshold:"):
+            try:
+                threshold = float(query.data.split(":", 1)[1])
+            except Exception:
+                threshold = config.default_threshold_percentage
+
+            session["threshold"] = threshold
+
+            await query.edit_message_text(
+                BotMessages.threshold_set(threshold),
+                reply_markup=BotKeyboards.get_main_menu()
+            )
+
+            # Move to confirmation
+            await self._show_monitoring_confirmation(query, session)
+
+        elif query.data == "cancel_threshold":
+            await query.edit_message_text(
+                "Threshold selection cancelled.",
+                reply_markup=BotKeyboards.get_main_menu()
             )
     
     async def _handle_stop_monitoring(self, query):
