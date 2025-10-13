@@ -2,6 +2,14 @@
 
 A comprehensive cryptocurrency trading information system with Telegram bot integration for monitoring arbitrage opportunities and providing consolidated market views across multiple exchanges.
 
+![Image](https://github.com/user-attachments/assets/c9957d51-dbc4-4a7a-abae-ce2c7bac6432)
+
+![Image](https://github.com/user-attachments/assets/3745f5fd-6eeb-470f-a52b-a83e6994dffd)
+
+![Image](https://github.com/user-attachments/assets/51cb807f-4c33-480b-9237-b0f568db3be0)
+
+![Image](https://github.com/user-attachments/assets/30169142-9859-4c47-b547-b328b14e578d)
+
 ## 🚀 Features
 
 ### Core Functionality
